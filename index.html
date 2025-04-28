@@ -5,44 +5,53 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
-    html, body {
+    html, body, #map {
       margin: 0;
       padding: 0;
       height: 100%;
-    }
-    #map {
-      height: 90%;
       width: 100%;
     }
-    #upload-box {
-      height: 10%;
-      padding: 10px;
-      background-color: #f7f7f7;
-      text-align: center;
+    .legend {
+        padding: 6px 8px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: white;
+        background: rgba(255,255,255,0.8);
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        border-radius: 5px;
+        line-height: 1.8;
+        color: #555;
     }
-    input[type="file"] {
-      margin-top: 5px;
+    .legend h4 {
+        margin: 0 0 5px;
+        color: #777;
+        text-align: center;
+    }
+    .legend i {
+        width: 18px;
+        height: 18px;
+        float: left;
+        margin-right: 8px;
+        opacity: 0.7;
     }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
-<div id="upload-box">
-  <label>📂 Tải thêm file GeoJSON: </label>
-  <input type="file" id="file-input" accept=".geojson,.json" />
-</div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+   crossorigin=""></script>
 <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
 <script>
+  // --- Base Maps ---
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors'
@@ -53,16 +62,19 @@
     attribution: 'Tiles © Esri — Source: Esri, Earthstar Geographics'
   });
 
+  // --- Map Initialization ---
   const map = L.map('map', {
-    center: [14.0583, 108.2772],
-    zoom: 6,
+    // Initial center, will be adjusted by fitBounds later
+    center: [21.13, 105.7], // Approximate center for Đan Phượng
+    zoom: 13,
     layers: [osm]
   });
 
+  // --- Geocoder Control ---
   L.Control.geocoder({
     defaultMarkGeocode: false,
-    placeholder: '🔍 Nhập địa chỉ hoặc tọa độ...',
-    position: 'topright'
+    placeholder: '🔍 Nhập địa chỉ...',
+    position: 'topleft' // Changed position to avoid overlap with legend
   })
   .on('markgeocode', function(e) {
     const latlng = e.geocode.center;
@@ -73,62 +85,118 @@
   })
   .addTo(map);
 
+  // --- Layer Control ---
   const baseMaps = {
-    "🗺️ OSM": osm,
-    "🛰️ Vệ tinh": esriSat
+    "🗺️ Bản đồ nền": osm,
+    "🛰️ Ảnh vệ tinh": esriSat
   };
 
-  const overlayMaps = {};
-  L.control.layers(baseMaps, overlayMaps).addTo(map);
+  const overlayMaps = {}; // Overlays will be added here
+  const layerControl = L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
 
-  let uploadedLayer;
-
-  function addGeoJSONLayer(data, name = "📍 Dữ liệu GeoJSON") {
-    if (uploadedLayer) {
-      map.removeLayer(uploadedLayer);
-    }
-
-    uploadedLayer = L.geoJSON(data, {
-      style: {
-        color: "#0000ff",        // viền màu xanh
-        weight: 2,
-        fillColor: "#0099ff",    // màu nước
-        fillOpacity: 0.4         // trong suốt 40%
-      },
-      onEachFeature: function (feature, layer) {
-        const name = feature.properties.name || "Không rõ";
-        layer.bindPopup("🌊 Hồ: " + name);
-      }
-    }).addTo(map);
-
-    map.fitBounds(uploadedLayer.getBounds());
-    overlayMaps[name] = uploadedLayer;
+  // --- Population Density Styling ---
+  function getColor(density) {
+    // Adjust these values based on your data's density range
+    return density > 5000 ? '#800026' :
+           density > 4000 ? '#BD0026' :
+           density > 3000 ? '#E31A1C' :
+           density > 2500 ? '#FC4E2A' :
+           density > 2000 ? '#FD8D3C' :
+           density > 1500 ? '#FEB24C' :
+           density > 1000 ? '#FED976' :
+                            '#FFFFCC'; // Lowest density color
   }
 
-  // 👉 Load sẵn GeoJSON từ GitHub
-  fetch("https://raw.githubusercontent.com/onceiwas/bao-linh-webgis/main/bao_linh_lake.geojson")
-    .then(res => res.json())
-    .then(data => addGeoJSONLayer(data, "🌊 Hồ Bao Linh"))
-    .catch(err => console.error("Không thể tải GeoJSON từ GitHub:", err));
-
-  // 👉 Cho phép upload thêm GeoJSON
-  document.getElementById("file-input").addEventListener("change", function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const geojson = JSON.parse(e.target.result);
-        addGeoJSONLayer(geojson, "📂 Dữ liệu từ upload");
-      } catch (err) {
-        alert("❌ Không đọc được file GeoJSON.");
-        console.error(err);
-      }
+  function styleFeature(feature) {
+    return {
+        fillColor: getColor(feature.properties.pop_density_km2), // Use population density
+        weight: 1,          // Border weight
+        opacity: 1,         // Border opacity
+        color: 'grey',      // Border color
+        fillOpacity: 0.7    // Fill opacity
     };
+  }
 
-    reader.readAsText(file);
-  });
+  // --- GeoJSON Loading and Processing ---
+  let danPhuongLayer;
+
+  // IMPORTANT: Replace this URL with the raw content URL of your GeoJSON file on GitHub
+  const geojsonUrl = "https://raw.githubusercontent.com/onceiwas/webgis-danphuong/refs/heads/main/pop_danphuong.geojson";
+
+  fetch(geojsonUrl)
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status} while fetching ${geojsonUrl}`);
+      }
+      return res.json();
+    })
+    .then(data => {
+      danPhuongLayer = L.geoJSON(data, {
+        style: styleFeature,
+        onEachFeature: function (feature, layer) {
+          const communeName = feature.properties.VARNAME_3 || "Không rõ tên";
+          const populationDensity = feature.properties.pop_density_km2 || "N/A";
+
+          // Popup on click
+          layer.bindPopup(`
+            <strong>Xã/Thị trấn:</strong> ${communeName}<br>
+            <strong>Mật độ dân số:</strong> ${populationDensity} (người/km²)
+          `);
+
+          // Permanent label (tooltip)
+          layer.bindTooltip(communeName, {
+            permanent: true,
+            direction: 'center',
+            className: 'commune-label', // Optional: for CSS styling
+            offset: [0, 0] // Adjust as needed
+          }).openTooltip();
+        }
+      }).addTo(map);
+
+      // Add layer to control
+      overlayMaps["👨‍👩‍👧‍👦 Mật độ dân số Đan Phượng"] = danPhuongLayer;
+      layerControl.addOverlay(danPhuongLayer, "👨‍👩‍👧‍👦 Mật độ dân số Đan Phượng");
+
+      // Zoom to the bounds of the loaded layer
+      map.fitBounds(danPhuongLayer.getBounds());
+
+      // --- Add Legend ---
+      const legend = L.control({position: 'bottomright'}); // Changed to bottom right as requested
+
+      legend.onAdd = function (map) {
+          const div = L.DomUtil.create('div', 'info legend');
+          const grades = [0, 1000, 1500, 2000, 2500, 3000, 4000, 5000]; // Match density breaks in getColor
+          const labels = [];
+          let from, to;
+
+          div.innerHTML += '<h4>Mật độ dân số (người/km²)</h4>'; // Legend Title
+
+          // loop through our density intervals and generate a label with a colored square for each interval
+          for (let i = 0; i < grades.length; i++) {
+              from = grades[i];
+              to = grades[i + 1];
+
+              labels.push(
+                  '<i style="background:' + getColor(from + 1) + '"></i> ' +
+                  from + (to ? '&ndash;' + to : '+'));
+          }
+
+          div.innerHTML += labels.join('<br>');
+          return div;
+      };
+
+      legend.addTo(map);
+
+    })
+    .catch(err => {
+        console.error("Không thể tải hoặc xử lý GeoJSON:", err);
+        alert(`Lỗi khi tải dữ liệu GeoJSON từ ${geojsonUrl}. Chi tiết: ${err.message}`);
+        // Add a marker at the approximate center if data fails to load
+        L.marker([21.13, 105.7]).addTo(map)
+          .bindPopup(`Không thể tải dữ liệu GeoJSON cho Đan Phượng.<br>Lỗi: ${err.message}`)
+          .openPopup();
+    });
+
 </script>
 
 </body>
